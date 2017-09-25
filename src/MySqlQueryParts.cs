@@ -23,24 +23,18 @@ namespace Elberos.Orm.MySql{
 		public List<string> order = null;
 		
 		public string where;
-		public string insert;
-		public string delete;
-		public string update;
-		public string from;
+		public string table_name;
 		
 		public MySqlQueryParts(){
 			this.select_before = new List<string>();
 			this.select = new List<string>();
-			this.set = new List<string>();
-			this.set_insert = new List<string>();
-			this.set_update = new List<string>();
+			this.set = new Dictionary<string, string>();
+			this.set_insert = new Dictionary<string, string>();
+			this.set_update = new Dictionary<string, string>();
+			this.order = new List<string>();
 			
 			this.where = "";
-			this.insert = "";
-			this.delete = "";
-			this.update = "";
-			this.from = "";
-			this.order = "";
+			this.table_name = "";
 		}
 	}
 	

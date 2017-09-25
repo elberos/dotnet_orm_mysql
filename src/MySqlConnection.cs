@@ -28,6 +28,14 @@ namespace Elberos.Orm.MySql{
 		
 		
 		/**
+		 * Create query builder
+		 */
+		public override QueryBuilder createQueryBuilder(){
+			return new MySqlQueryBuilder(this);
+		}
+		
+		
+		/**
 		 * Configures connection
 		 */
 		public override void Configure(IConfigurationSection section){
@@ -38,6 +46,13 @@ namespace Elberos.Orm.MySql{
 			this.port = section["port"];
 		}
 		
+		
+		/**
+		 * Check DB connection
+		 */
+		public override bool connected(){
+			return this.conn != null;
+		}
 		
 		
 		/**
@@ -63,6 +78,12 @@ namespace Elberos.Orm.MySql{
 		 */
 		public override async void disconnect(){
 			await this.conn.CloseAsync();
+			this.conn = null;
+		}
+		
+		
+		public override string escapeKey(string var){
+			return "`" + var + "`";
 		}
 		
 		

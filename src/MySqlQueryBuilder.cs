@@ -55,6 +55,12 @@ namespace Elberos.Orm.MySql{
 		protected DbDataReader _cmd_result = null;
 		
 		
+		public MySqlQueryBuilder(Connection conn) : base(conn){
+			this._sql_parts = new MySqlQueryParts();
+			this._parameters = new List<QueryParameter>();
+		}
+		
+		
 		/**
 		 * Generate next parameter
 		 */
@@ -72,14 +78,17 @@ namespace Elberos.Orm.MySql{
 		 */
 		public override string getFieldName(string field_name){
 			
-			if (MySqlConnection.MYSQL_RESERVERD_WORDS.IndexOf(field_name) > -1)
-				field_name = "`" + field_name + "`";
+			//if (MySqlConnection.MYSQL_RESERVERD_WORDS.IndexOf(field_name) > -1)
+				//field_name = "`" + field_name + "`";
 			
+			if (field_name != "*")
+				field_name = "`" + field_name + "`";
+				
 			if (!this.canAlias())
-				return field_name;
+				return "`" + field_name + "`";
 			
 			if (field_name.IndexOf(".") == -1)
-				return this._alias + "." + field_name;
+				return "`" + this._alias+ "`" + "." + field_name;
 			
 			return field_name;
 		}
@@ -145,8 +154,13 @@ namespace Elberos.Orm.MySql{
 		public override QueryBuilder select(string[] fields = null){
 			this._query_type = MySqlQueryBuilder.QUERY_SELECT;
 			
-			foreach (string field in fields){
-				this._sql_parts.select.Add( this.getFieldName(field) );
+			if (fields != null){
+				foreach (string field in fields){
+					this._sql_parts.select.Add( this.getFieldName(field) );
+				}
+			}
+			else{
+				this._sql_parts.select.Add( this.getFieldName("*") );
 			}
 			
 			return this;
@@ -155,16 +169,33 @@ namespace Elberos.Orm.MySql{
 		
 		
 		/**
-		 * Build insert query
+		 * Set table name
 		 *
-		 * @param string entity_name 
+		 * @param dynamic entity_repository_name 
 		 * @param string alias 
 		 * @return self
 		 */
-		public override QueryBuilder insert(string entity_name, string alias = null){
+		public override QueryBuilder from(dynamic entity_repository_name, string alias = null){
+			this.setEntityRepository(entity_repository_name);
+			this.setAlias(alias);
+			this._sql_parts.table_name = this.getTableName();
+			return this;
+		}
+		
+		
+		
+		/**
+		 * Build insert query
+		 *
+		 * @param dynamic entity_name 
+		 * @param string alias 
+		 * @return self
+		 */
+		public override QueryBuilder insert(dynamic entity_repository_name, string alias = null){
 			this._query_type = MySqlQueryBuilder.QUERY_INSERT;
-			this.setEntity(entity_name, alias);
-			this._sql_parts.insert = this.getTableName();
+			this.setEntityRepository(entity_repository_name);
+			this.setAlias(alias);
+			this._sql_parts.table_name = this.getTableName();
 			return this;
 		}
 		
@@ -177,10 +208,11 @@ namespace Elberos.Orm.MySql{
 		 * @param string alias 
 		 * @return self
 		 */
-		public override QueryBuilder update(string entity_name, string alias = null){
+		public override QueryBuilder update(dynamic entity_repository_name, string alias = null){
 			this._query_type = MySqlQueryBuilder.QUERY_UPDATE;
-			this.setEntity(entity_name, alias);
-			this._sql_parts.update = this.getTableName() + " " + this._alias;
+			this.setEntityRepository(entity_repository_name);
+			this.setAlias(alias);
+			this._sql_parts.table_name = this.getTableName() + " " + this._alias;
 			return this;
 		}
 		
@@ -193,10 +225,11 @@ namespace Elberos.Orm.MySql{
 		 * @param string alias 
 		 * @return self
 		 */
-		public override QueryBuilder insertOrUpdate(string entity_name, string alias = null){
+		public override QueryBuilder insertOrUpdate(dynamic entity_repository_name, string alias = null){
 			this._query_type = MySqlQueryBuilder.QUERY_INSERT_OR_UPDATE;
-			this.setEntity(entity_name, alias);
-			this._sql_parts.insert = this.getTableName();
+			this.setEntityRepository(entity_repository_name);
+			this.setAlias(alias);
+			this._sql_parts.table_name = this.getTableName();
 			return this;
 		}
 		
@@ -209,9 +242,10 @@ namespace Elberos.Orm.MySql{
 		 * @param string alias 
 		 * @return self
 		 */
-		public override QueryBuilder delete(string entity_name, string alias = null){
+		public override QueryBuilder delete(dynamic entity_repository_name, string alias = null){
 			this._query_type = MySqlQueryBuilder.QUERY_DELETE;
-			this.setEntity(entity_name, alias);
+			this.setEntityRepository(entity_repository_name);
+			this.setAlias(alias);
 			return this;
 		}
 		
@@ -423,7 +457,7 @@ namespace Elberos.Orm.MySql{
 		 * @param array arr The array of key => value
 		 * @return self
 		 */
-		public QueryBuilder setValues(Dictionary<string, dynamic> arr){
+		public override QueryBuilder setValues(Dictionary<string, dynamic> arr){
 			foreach (KeyValuePair<string, dynamic> entry in arr)
 				this.set(entry.Key, entry.Value);
 				
@@ -438,7 +472,7 @@ namespace Elberos.Orm.MySql{
 		 * @param array arr Order list
 		 * @return self
 		 */
-		public QueryBuilder order(Dictionary<string, long> arr){
+		public override QueryBuilder order(Dictionary<string, long> arr){
 			
 			List<string> list = new List<string>();
 			foreach (KeyValuePair<string, long> entry in arr){
@@ -578,7 +612,7 @@ namespace Elberos.Orm.MySql{
 		 *
 		 * @return string
 		 */
-		public string getSql(){
+		public override dynamic getQuery(){
 			Connection connection = this.getConnection();
 			
 			string sql = this.buildSQL();
@@ -608,13 +642,14 @@ namespace Elberos.Orm.MySql{
 		 * @return string
 		 */
 		protected string buildSQL(){
+			Connection connection = this.getConnection();
 			
 			if (this._build_sql != null)
 				return this._build_sql;
 			
 			List<string> sql = new List<string>();
 			
-			if (this._filter.Count > 0 && this._sql_parts.where == ""){
+			if (this._filter != null && this._filter.Count > 0 && this._sql_parts.where == ""){
 				List<string> and_where = this.filterRecurse(this._filter);
 				string where = String.Join(" and ", and_where);
 				
@@ -632,17 +667,29 @@ namespace Elberos.Orm.MySql{
 				if (this._sql_parts.select.Count > 0)
 					sql.Add( String.Join(", ", this._sql_parts.select) );
 				
-				sql.Add("FROM " + this._sql_parts.from);
+				sql.Add("FROM " + connection.escapeKey(this._sql_parts.table_name));
+				if (this._alias != null){
+					sql.Add("AS " + connection.escapeKey(this._alias));
+				}
 			}
 			else if (this._query_type == MySqlQueryBuilder.QUERY_INSERT || 
 					this._query_type == MySqlQueryBuilder.QUERY_INSERT_OR_UPDATE){
-				sql.Add("INSERT INTO " + this._sql_parts.insert);
+				sql.Add("INSERT INTO " + connection.escapeKey(this._sql_parts.table_name));
+				if (this._alias != null){
+					sql.Add("AS " + connection.escapeKey(this._alias));
+				}
 			}
 			else if (this._query_type == MySqlQueryBuilder.QUERY_UPDATE){
-				sql.Add("UPDATE " + this._sql_parts.update);
+				sql.Add("UPDATE " + connection.escapeKey(this._sql_parts.table_name));
+				if (this._alias != null){
+					sql.Add("AS " + connection.escapeKey(this._alias));
+				}
 			}
 			else if (this._query_type == MySqlQueryBuilder.QUERY_DELETE){
-				sql.Add("DELETE FROM " + this._sql_parts.from);
+				sql.Add("DELETE FROM " + connection.escapeKey(this._sql_parts.table_name));
+				if (this._alias != null){
+					sql.Add("AS " + connection.escapeKey(this._alias));
+				}
 			}
 			
 			if (this._query_type == MySqlQueryBuilder.QUERY_INSERT || this._query_type == MySqlQueryBuilder.QUERY_INSERT_OR_UPDATE){
@@ -650,12 +697,12 @@ namespace Elberos.Orm.MySql{
 				
 				if (this._sql_parts.set_insert.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set_insert){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				if (this._sql_parts.set.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				
@@ -668,12 +715,12 @@ namespace Elberos.Orm.MySql{
 				
 				if (this._sql_parts.set.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				if (this._sql_parts.set_update.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set_update){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				if (arr.Count > 0)
@@ -686,12 +733,12 @@ namespace Elberos.Orm.MySql{
 				
 				if (this._sql_parts.set.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				if (this._sql_parts.set_update.Count > 0){
 					foreach (KeyValuePair<string, string> entry in this._sql_parts.set_update){
-						arr.Add(entry.Key + " = " + entry.Value);
+						arr.Add(connection.escapeKey(entry.Key) + " = " + entry.Value);
 					}
 				}
 				if (arr.Count > 0)
