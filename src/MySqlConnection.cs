@@ -66,6 +66,7 @@ namespace Elberos.Orm.MySql{
 			list.Add("database=" + this.dbname);
 			list.Add("port=" + this.port);
 			list.Add("password=" + this.password);
+			list.Add("SslMode=none");
 			string connStr = String.Join(";", list);
 			
 			this.conn = new MySqlConnectionCore(connStr);
